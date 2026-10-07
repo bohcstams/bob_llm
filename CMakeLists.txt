@@ -6,9 +6,8 @@ find_package(std_msgs REQUIRED)
 
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 ament_python_install_package(${PROJECT_NAME})
-install(PROGRAMS
-  bob_llm/llm_node.py
-  bob_llm/chat_node.py
+install(PROGRAMS bob_llm/llm_node.py
   DESTINATION lib/${PROJECT_NAME}
+  RENAME llm
 )
 ament_package()
