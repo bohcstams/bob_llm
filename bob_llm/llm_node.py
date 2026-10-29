@@ -343,8 +343,8 @@ class LLMNode(Node):
         system_prompt = self._load_system_prompt()
         example_messages = []
         if system_prompt:
-            _, example_messages = self._parse_prompt_examples(system_prompt)
-            self.chat_history.append({'role': 'system', 'content': system_prompt})
+            base_prompt, example_messages = self._parse_prompt_examples(system_prompt)
+            self.chat_history.append({'role': 'system', 'content': base_prompt})
             self.get_logger().info('System prompt added.')
         initial_messages_str = self.get_parameter('initial_messages_json').value
         try:
