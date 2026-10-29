@@ -309,30 +309,59 @@ class LLMNode(Node):
         # Priority 3: system_prompt as string
         return system_prompt
 
+    def _parse_prompt_examples(self, system_prompt: str):
+        """
+        Extract 'User: ...' / 'Assistant: ...' pairs from an 'Examples:' section
+        in the system prompt into real chat history messages for few-shot prompting.
+        """
+        if not system_prompt or '\nExamples:' not in system_prompt:
+            return system_prompt, []
+
+        base_prompt, examples_block = system_prompt.split('\nExamples:', 1)
+        messages = []
+        current_user = None
+
+        for raw_line in examples_block.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith('User:'):
+                current_user = line[len('User:'):].strip()
+            elif line.startswith('Assistant:') and current_user is not None:
+                assistant_reply = line[len('Assistant:'):].strip()
+                messages.append({'role': 'user', 'content': current_user})
+                messages.append({'role': 'assistant', 'content': assistant_reply})
+                current_user = None
+
+        if not messages:
+            return system_prompt, []
+
+        return base_prompt.strip(), messages
+
     def _initialize_chat_history(self):
         """Populate the initial chat history from ROS parameters."""
         system_prompt = self._load_system_prompt()
+        example_messages = []
         if system_prompt:
+            _, example_messages = self._parse_prompt_examples(system_prompt)
             self.chat_history.append({'role': 'system', 'content': system_prompt})
             self.get_logger().info('System prompt added.')
         initial_messages_str = self.get_parameter('initial_messages_json').value
         try:
             initial_messages = json.loads(initial_messages_str)
-            if isinstance(initial_messages, list):
+            if isinstance(initial_messages, list) and initial_messages:
                 self.chat_history.extend(initial_messages)
-                self._user_turns_count = sum(
-                    1 for m in initial_messages if m.get('role') == 'user')
                 self.get_logger().info(
-                    f'Loaded {len(initial_messages)} messages '
-                    f'({self._user_turns_count} user turns).')
-                # Log the last message for context
-                if initial_messages:
-                    last_msg = initial_messages[-1]
-                    text = self._get_message_text(last_msg.get('content', ''))
-                    self.get_logger().info(f'Last message: {text[:100]}...')
+                    f'Loaded {len(initial_messages)} initial messages from parameter.')
+            elif example_messages:
+                self.chat_history.extend(example_messages)
+                self.get_logger().info(
+                    f'Loaded {len(example_messages)} few-shot messages '
+                    f'({len(example_messages) // 2} turns) from system prompt Examples.')
         except json.JSONDecodeError:
             self.get_logger().error(
                 "Failed to parse 'initial_messages_json'.")
+        self._user_turns_count = 0
 
     def load_llm_client(self):
         """Load and configure the LLM client based on ROS parameters."""
